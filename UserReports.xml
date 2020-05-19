@@ -1,0 +1,457 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<displays>
+<display id="2cd07682-0172-1000-8023-0a64a632dc54" type="" style="Table" enable="true">
+	<name><![CDATA[Top SQL by Buffer Gets]]></name>
+	<description><![CDATA[Top SQL by Buffer Gets]]></description>
+	<tooltip><![CDATA[Top SQL by Buffer Gets]]></tooltip>
+	<drillclass><![CDATA[]]></drillclass>
+	<CustomValues>
+		<TYPE><![CDATA[null]]></TYPE>
+	</CustomValues>
+	<query>
+		<sql><![CDATA[select substr(sql_text,1,500) "SQL",
+                                      (cpu_time/1000000) "CPU_Seconds",
+                                      disk_reads "Disk_Reads",
+                                      buffer_gets "Buffer_Gets",
+                                      executions "Executions",
+                                      case when rows_processed = 0 then null
+                                           else round((buffer_gets/nvl(replace(rows_processed,0,1),1))) 
+                                           end "Buffer_gets/rows_proc",
+                                      round((buffer_gets/nvl(replace(executions,0,1),1))) "Buffer_gets/executions",
+                                      (elapsed_time/1000000) "Elapsed_Seconds",
+                                      module "Module"
+                                 from gv$sql s
+                                order by buffer_gets desc nulls last]]></sql>
+		<columns>
+			<column colFormat="{0,number,###,###,###.0000}" hidden="false" isEditable="false">
+				<colName><![CDATA[CPU_Seconds]]></colName>
+			</column>
+			<column colFormat="{0,number,###,###,###.##}" hidden="false" isEditable="false">
+				<colName><![CDATA[Disk_Reads]]></colName>
+			</column>
+			<column colFormat="{0,number,###,###,###.##}" hidden="false" isEditable="false">
+				<colName><![CDATA[Buffer_Gets]]></colName>
+			</column>
+			<column colFormat="{0,number,###,###,###.##}" hidden="false" isEditable="false">
+				<colName><![CDATA[Executions]]></colName>
+			</column>
+			<column colFormat="{0,number,###,###,##0.000}" hidden="false" isEditable="false">
+				<colName><![CDATA[Buffer_gets/rows_proc]]></colName>
+			</column>
+			<column colFormat="{0,number,###,###,##0.000}" hidden="false" isEditable="false">
+				<colName><![CDATA[Buffer_gets/executions]]></colName>
+			</column>
+			<column colFormat="{0,number,###,###,###.0000}" hidden="false" isEditable="false">
+				<colName><![CDATA[Elapsed_Seconds]]></colName>
+			</column>
+		</columns>
+	</query>
+</display>
+<folder>
+	<name><![CDATA[@FranckPachot]]></name>
+	<tooltip><![CDATA[]]></tooltip>
+	<description><![CDATA[]]></description>
+		<display id="2c07859e-0172-1000-8002-0a64a632dc54" type="" style="Table" enable="true">
+		<name><![CDATA[Statspack]]></name>
+		<description><![CDATA[]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[with "performance statistics" as (
+        -- This view adapts to AWR and Statspack and gathers statistics from different sources
+        --
+        ------------ comment one of the 2 following lines depending on AWR our Statspack source for SYSTEM EVENTS
+        --select dbid,instance_number,snap_id,'WC' type,wait_class name,sum(time_waited_micro) value from dba_hist_system_event group by dbid,instance_number,snap_id,wait_class
+        select dbid,instance_number,snap_id,'WC' type,wait_class name,sum(time_waited_micro) value from stats$system_event join v$event_name using(event_id) group by dbid,instance_number,snap_id,wait_class
+        ------------ end of SYSTEM EVENTS information
+        union all
+        ------------ comment one of the 2 following lines depending on AWR our Statspack source for TIME MODEL
+        --select dbid,instance_number,snap_id,'TM' type,stat_name name,value from dba_hist_sys_time_model where stat_name in ('DB time','DB CPU')
+        select dbid,instance_number,snap_id,'TM' type,stat_name name,value from stats$sys_time_model join stats$time_model_statname using (stat_id) where stat_name in ('DB time','DB CPU')
+        ------------ end of TIME MODEL information
+        union all
+        ------------ comment one of the 2 following lines depending on AWR our Statspack source for OS STATS
+        --select dbid,instance_number,snap_id,'OS' type,stat_name,value from dba_hist_osstat where stat_name in ('BUSY_TIME','USER_TIME','IDLE_TIME','LOAD','NUM_CPU_CORES')
+        select dbid,instance_number,snap_id,'OS' type,stat_name,value from stats$osstat join stats$osstatname using(osstat_id) where stat_name in ('BUSY_TIME','USER_TIME','IDLE_TIME','LOAD','NUM_CPU_CORES')
+        ------------ end of OS STATS information
+        union all
+        ------------ comment one of the 2 following lines depending on AWR our Statspack source for INSTANCE PARAM
+        --select dbid,instance_number,snap_id,'IP' type,parameter_name stat_name,to_number(value) value from dba_hist_parameter where parameter_name in ('cpu_count')
+        select dbid,instance_number,snap_id,'IP' type,name stat_name,to_number(value) value from stats$parameter where name in ('cpu_count')
+        ------------ end of OS STATS information
+)
+,"snapshots" as (
+  -- this view joins with snapshot information, also adapts to AWR or Statspack
+  select db_name,host_name,instance_name,startup_time,begin_interval_time,end_interval_time,round((cast(end_interval_time as date)-cast(begin_interval_time as date))*24*60*60*1000000) microseconds,
+   dbid,instance_number,snap_id,lag(snap_id)over(partition by dbid,instance_number,s.type,s.name order by snap_id) prev_snap_id,type,name,value,value-lag(value)over(partition by dbid,instance_number,s.type,s.name order by snap_id) delta_value
+   ,case when startup_time >= lag(end_interval_time)over(partition by dbid,instance_number,s.type,s.name order by snap_id) then 'Y' end "instance bounced"
+  from "performance statistics" s         
+  ------------ comment one of the 2 following lines depending on AWR our Statspack source for ------------
+  --join dba_hist_snapshot using(dbid,instance_number,snap_id) join dba_hist_database_instance using(dbid,instance_number,startup_time)      
+  join (select dbid,instance_number,snap_id,startup_time,cast(snap_time as timestamp) end_interval_time,cast(lag(snap_time)over(partition by dbid,instance_number order by snap_id) as timestamp) begin_interval_time , min(snap_id)over(partition by dbid,instance_number,trunc(snap_time,'hh24')) first_hourly_snap from stats$snapshot) using(dbid,instance_number,snap_id) join (select dbid,instance_number,startup_time,db_name,host_name,instance_name from stats$database_instance) using(dbid,instance_number,startup_time)
+  ------------ end of SNAPSHOTS information
+  where snap_id=first_hourly_snap --and  end_interval_time > sysdate-15 ------------ change history depth here
+)
+, "pivoted" as (
+ -- this view pivots the metrics to columns using a SQL Model to do some awesome calculations
+ select 
+  db_name,host_name,instance_name,dbid,instance_number,snap_id,prev_snap_id
+  ,to_char(end_interval_time,'yyyy-mm-dd') day,to_char(end_interval_time,'hh24:mi') hour,to_char(end_interval_time,'dy') dow
+  ,round(microseconds/1000000/60) minutes
+  ,"OS_CPU%","OS_CPUS","OS_LOAD","CPU_COUNT"
+  , "DB_Load(AAS)","DB_TIME(s)"
+  ,"ON CPU",end_interval_time
+  ------------ begin "selects" as generated for all wait classes except Idle
+          ,"Administrative"
+          ,"Application"
+          ,"Cluster"
+          ,"Commit"
+          ,"Concurrency"
+          ,"Configuration"
+          ,"Network"
+          ,"Other"
+          ,"Queueing"
+          ,"Scheduler"
+          ,"System I/O"
+          ,"User I/O"  
+    ------------ end "selects"
+   ,"Wait_for_CPU" 
+from "snapshots" where "instance bounced" is null -- don't show snapshots across startup
+  model return updated rows
+  partition by (dbid,db_name,host_name,instance_number,instance_name,snap_id,prev_snap_id,begin_interval_time,end_interval_time)
+  dimension by (type,name) 
+  measures (cast(null as number) as "OS_CPU%",cast(null as number) as "OS_CPUS",cast(null as number) as "OS_LOAD"
+  ,cast(null as number) as "CPU_COUNT",cast(null as number) as "DB_Load(AAS)" ,cast(null as number) as "DB_TIME(s)"
+  ,cast(null as number) as "ON CPU",cast(null as number) as "Wait_for_CPU"
+  ------------ begin "measures" as generated for all wait classes except Idle
+          ,cast(null as number) as "Administrative"
+          ,cast(null as number) as "Application"
+          ,cast(null as number) as "Cluster"
+          ,cast(null as number) as "Commit"
+          ,cast(null as number) as "Concurrency"
+          ,cast(null as number) as "Configuration"
+          ,cast(null as number) as "Network"
+          ,cast(null as number) as "Other"
+          ,cast(null as number) as "Queueing"
+          ,cast(null as number) as "Scheduler"
+          ,cast(null as number) as "System I/O"
+          ,cast(null as number) as "User I/O"    
+    ------------ end "measures"
+    ,microseconds,value,delta_value) 
+  (
+     microseconds['','']=microseconds['TM','DB time']
+    ,"OS_CPU%"['','']=round(100*delta_value['OS','USER_TIME']/(delta_value['OS','IDLE_TIME']+delta_value['OS','BUSY_TIME']))
+    ,"OS_CPUS"['','']=round(value['OS','NUM_CPU_CORES'])
+    ,"OS_LOAD"['','']=round(value['OS','LOAD'])
+    ,"CPU_COUNT"['','']=round(value['IP','cpu_count'])
+    ,"DB_Load(AAS)"['','']=round(delta_value['TM','DB time']/microseconds['',''],2)
+    ,"DB_TIME(s)"['','']=round(delta_value['TM','DB time']/1e6,2)
+    ,"ON CPU"['','']=round(delta_value['TM','DB CPU']/microseconds['',''],2)
+    ,"Wait_for_CPU"['','']=greatest(round((delta_value['TM','DB time']-delta_value['TM','DB CPU']-sum(delta_value)['WC',name not in ('Idle','System I/O')])/microseconds['',''],2),0)
+  ------------ begin "rules" as generated for all wait classes except Idle
+          ,"Administrative"['','']=nvl(round(delta_value['WC','Administrative']/microseconds['',''],2),0)
+          ,"Application"['','']=nvl(round(delta_value['WC','Application']/microseconds['',''],2),0)
+          ,"Cluster"['','']=nvl(round(delta_value['WC','Cluster']/microseconds['',''],2),0)
+          ,"Commit"['','']=nvl(round(delta_value['WC','Commit']/microseconds['',''],2),0)
+          ,"Concurrency"['','']=nvl(round(delta_value['WC','Concurrency']/microseconds['',''],2),0)
+          ,"Configuration"['','']=nvl(round(delta_value['WC','Configuration']/microseconds['',''],2),0)
+          ,"Network"['','']=nvl(round(delta_value['WC','Network']/microseconds['',''],2),0)
+          ,"Other"['','']=nvl(round(delta_value['WC','Other']/microseconds['',''],2),0)
+          ,"Queueing"['','']=nvl(round(delta_value['WC','Queueing']/microseconds['',''],2),0)
+          ,"Scheduler"['','']=nvl(round(delta_value['WC','Scheduler']/microseconds['',''],2),0)
+          ,"System I/O"['','']=nvl(round(delta_value['WC','System I/O']/microseconds['',''],2),0)
+          ,"User I/O"['','']=nvl(round(delta_value['WC','User I/O']/microseconds['',''],2),0)
+    ------------ end "rules"
+  )
+)
+select
+"DOW","DAY","HOUR",
+-- first gauge is the CPU load as a percentage of the max. observed
+'SQLDEV:GAUGE:0:'||100*max("ON CPU"/"CPU_COUNT")over()||':0:'||'0'||':'||100*"ON CPU"/"CPU_COUNT" "ON CPU (vs. cpu_count)",
+-- second gauge shows the DB Load (AAS) as a ratio on the max, so that 100% is 2x the CPU usage to show in green only when low wait events
+'SQLDEV:GAUGE:0:'||50*round(max("DB_Load(AAS)"/"ON CPU")over())||':0:'||'0'||':'||50*round("DB_Load(AAS)"/"ON CPU") "DB Load (vs. CPU Load)"
+,"DB_Load(AAS)","ON CPU","Scheduler","System I/O","User I/O","Commit","Concurrency","Configuration"
+,"Administrative","Application","Cluster","Network","Other","Queueing"
+,dbid,instance_number,snap_id end_snap_id,prev_snap_id begin_snap_id,"DB_TIME(s)" DB_TIME
+from "pivoted" v  
+  order by trunc(end_interval_time,'MI') desc,db_name,instance_name]]></sql>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+				null									</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Snapshots]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select to_char(s.startup_time,' dd Mon "at" HH24:mi:ss') "Instance startup"
+     , di.instance_name                                  "Instance name"
+     , di.db_name                                        "Database name"
+     , s.snap_id                                         SNAP_ID
+     , to_char(s.snap_time,'dd Mon YYYY HH24:mi')        "Snapshot time"
+     , s.snap_level                                      "Level"
+     , substr(s.ucomment, 1,60)                          "Comment"
+     , '@?/rdbms/admin/spreport'||chr(13)||0||chr(13)
+     ||nvl(lag(s.snap_id)over(partition by s.dbid,s.instance_number order by s.snap_id),:BEGIN_SNAP_ID)
+     ||chr(13)||s.snap_id "spreport"
+  from stats$snapshot s
+     , stats$database_instance di
+ where s.dbid              = :DBID
+   and di.dbid             = :DBID
+   and s.instance_number   = :INSTANCE_NUMBER 
+   and di.instance_number  = :INSTANCE_NUMBER
+   and di.dbid             = s.dbid
+   and di.instance_number  = s.instance_number
+   and di.startup_time     = s.startup_time
+   and s.snap_id > :BEGIN_SNAP_ID and s.snap_id <= :END_SNAP_ID
+ order by db_name, instance_name, snap_id]]></sql>
+				<binds>
+					<bind id="BEGIN_SNAP_ID">
+						<prompt><![CDATA[BEGIN_SNAP_ID]]></prompt>
+						<tooltip><![CDATA[BEGIN_SNAP_ID]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="DBID">
+						<prompt><![CDATA[DBID]]></prompt>
+						<tooltip><![CDATA[DBID]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="INSTANCE_NUMBER">
+						<prompt><![CDATA[INSTANCE_NUMBER]]></prompt>
+						<tooltip><![CDATA[INSTANCE_NUMBER]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="END_SNAP_ID">
+						<prompt><![CDATA[END_SNAP_ID]]></prompt>
+						<tooltip><![CDATA[END_SNAP_ID]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="null" author="null" subject="null" keywords="null" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+					null											</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Statements]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select
+'SQLDEV:GAUGE:0:100:0:0:'||100*(e.ELAPSED_TIME-b.ELAPSED_TIME)/1e6/:DB_TIME "% DB Time"
+,e.SNAP_ID
+,e.DBID
+,e.INSTANCE_NUMBER
+,e.TEXT_SUBSET
+,e.OLD_HASH_VALUE
+,e.SQL_TEXT
+,e.SQL_ID
+,e.MODULE
+,e.ADDRESS
+,e.OUTLINE_CATEGORY
+,e.SQL_PROFILE
+,e.LAST_ACTIVE_TIME
+,e.SHARABLE_MEM
+,e.SORTS-b.SORTS SORTS
+,e.LOADED_VERSIONS
+,e.FETCHES-b.FETCHES FETCHES
+,e.EXECUTIONS-b.EXECUTIONS EXECUTIONS
+,e.PX_SERVERS_EXECUTIONS-b.PX_SERVERS_EXECUTIONS PX_SERVERS_EXECUTIONS
+,e.END_OF_FETCH_COUNT-b.END_OF_FETCH_COUNT END_OF_FETCH_COUNT
+,e.LOADS-b.LOADS LOADS
+,e.INVALIDATIONS-b.INVALIDATIONS INVALIDATIONS
+,e.PARSE_CALLS-b.PARSE_CALLS PARSE_CALLS
+,e.DISK_READS-b.DISK_READS DISK_READS
+,e.DIRECT_WRITES-b.DIRECT_WRITES DIRECT_WRITES
+,e.BUFFER_GETS-b.BUFFER_GETS BUFFER_GETS
+,e.APPLICATION_WAIT_TIME-b.APPLICATION_WAIT_TIME APPLICATION_WAIT_TIME
+,e.CONCURRENCY_WAIT_TIME-b.CONCURRENCY_WAIT_TIME CONCURRENCY_WAIT_TIME
+,e.CLUSTER_WAIT_TIME-b.CLUSTER_WAIT_TIME CLUSTER_WAIT_TIME
+,e.USER_IO_WAIT_TIME-b.USER_IO_WAIT_TIME USER_IO_WAIT_TIME
+,e.PLSQL_EXEC_TIME-b.PLSQL_EXEC_TIME PLSQL_EXEC_TIME
+,e.JAVA_EXEC_TIME-b.JAVA_EXEC_TIME JAVA_EXEC_TIME
+,e.ROWS_PROCESSED-b.ROWS_PROCESSED ROWS_PROCESSED
+,e.COMMAND_TYPE
+,e.HASH_VALUE
+,e.VERSION_COUNT
+,e.CPU_TIME-b.CPU_TIME CPU_TIME
+,e.ELAPSED_TIME-b.ELAPSED_TIME ELAPSED_TIME
+,e.AVG_HARD_PARSE_TIME
+,e.OUTLINE_SID
+,e.CHILD_LATCH
+,e.PROGRAM_ID
+,e.PROGRAM_LINE#
+,e.EXACT_MATCHING_SIGNATURE
+,e.FORCE_MATCHING_SIGNATURE
+from
+PERFSTAT.STATS$SQL_SUMMARY e join PERFSTAT.STATS$SQL_SUMMARY b
+on(e.dbid=b.dbid and e.instance_number=b.instance_number and e.TEXT_SUBSET=b.TEXT_SUBSET and e.OLD_HASH_VALUE=b.OLD_HASH_VALUE)
+where b.dbid=:DBID and b.instance_number=:INSTANCE_NUMBER and e.dbid=:DBID and e.instance_number=:INSTANCE_NUMBER 
+and b.snap_id = :BEGIN_SNAP_ID and e.snap_id = :END_SNAP_ID
+order by ELAPSED_TIME desc]]></sql>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="null" author="null" subject="null" keywords="null" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+					null											</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Time model]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select
+'SQLDEV:GAUGE:0:100:0:0:'||100*(e.VALUE-b.VALUE)/1e6/:DB_TIME "% DB Time"
+,n.STAT_NAME "Statistic"
+,round((e.VALUE-b.VALUE)/1e6,2) "Seconds"
+,round((e.VALUE-b.VALUE)/1e6/60,2) "minutes"
+from
+PERFSTAT.STATS$SYS_TIME_MODEL e join PERFSTAT.STATS$SYS_TIME_MODEL b
+on(e.dbid=b.dbid and e.instance_number=b.instance_number and e.STAT_ID=b.STAT_ID)
+join stats$time_model_statname n on (b.stat_id=n.stat_id)
+where b.dbid=:DBID and b.instance_number=:INSTANCE_NUMBER and e.dbid=:DBID and e.instance_number=:INSTANCE_NUMBER 
+and b.snap_id = :BEGIN_SNAP_ID and e.snap_id = :END_SNAP_ID
+order by (e.VALUE-b.VALUE) desc]]></sql>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="null" author="null" subject="null" keywords="null" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+					null											</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[Foreground Wait Events]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select
+'SQLDEV:GAUGE:0:100:0:0:'||100*(e.TIME_WAITED_MICRO-b.TIME_WAITED_MICRO)/1e6/:DB_TIME "% DB Time"
+,e.EVENT "Wait Event"
+,e.TOTAL_WAITS-b.TOTAL_WAITS "Wait count"
+,round((e.TIME_WAITED_MICRO-b.TIME_WAITED_MICRO)/1e6,2) "Time waited(s)"
+,round((e.TIME_WAITED_MICRO-b.TIME_WAITED_MICRO)/1e3/(e.TOTAL_WAITS-b.TOTAL_WAITS),2) "Avg wait(ms)"
+,e.DBID
+,e.INSTANCE_NUMBER
+,e.EVENT
+,e.TIME_WAITED_MICRO_FG-b.TIME_WAITED_MICRO_FG TIME_WAITED_MICRO_FG
+,e.EVENT_ID
+,e.TOTAL_WAITS-b.TOTAL_WAITS TOTAL_WAITS
+,e.TOTAL_TIMEOUTS-b.TOTAL_TIMEOUTS TOTAL_TIMEOUTS
+,e.TIME_WAITED_MICRO-b.TIME_WAITED_MICRO TIME_WAITED_MICRO
+,e.TOTAL_WAITS_FG-b.TOTAL_WAITS_FG TOTAL_WAITS_FG
+,e.TOTAL_TIMEOUTS_FG-b.TOTAL_TIMEOUTS_FG TOTAL_TIMEOUTS_FG
+from PERFSTAT.STATS$SYSTEM_EVENT e join PERFSTAT.STATS$SYSTEM_EVENT b
+on(e.dbid=b.dbid and e.instance_number=b.instance_number and e.EVENT=b.EVENT)
+where b.dbid=:DBID and b.instance_number=:INSTANCE_NUMBER and e.dbid=:DBID and e.instance_number=:INSTANCE_NUMBER 
+and b.snap_id = :BEGIN_SNAP_ID and e.snap_id = :END_SNAP_ID
+--and e.EVENT not in (select name from V$EVENT_NAME where wait_class='Idle')
+and e.TOTAL_WAITS>b.TOTAL_WAITS and e.TOTAL_WAITS_FG>b.TOTAL_WAITS_FG
+order by TIME_WAITED_MICRO desc]]></sql>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="null" author="null" subject="null" keywords="null" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+					null											</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+		</display>
+	</display>
+</folder>
+</displays>
