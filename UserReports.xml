@@ -1,66 +1,212 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <displays>
-<display id="2cd07682-0172-1000-8023-0a64a632dc54" type="" style="Table" enable="true">
-	<name><![CDATA[Top SQL by Buffer Gets]]></name>
-	<description><![CDATA[Top SQL by Buffer Gets]]></description>
-	<tooltip><![CDATA[Top SQL by Buffer Gets]]></tooltip>
-	<drillclass><![CDATA[]]></drillclass>
-	<CustomValues>
-		<TYPE><![CDATA[null]]></TYPE>
-	</CustomValues>
-	<query>
-		<sql><![CDATA[select substr(sql_text,1,500) "SQL",
-                                      (cpu_time/1000000) "CPU_Seconds",
-                                      disk_reads "Disk_Reads",
-                                      buffer_gets "Buffer_Gets",
-                                      executions "Executions",
-                                      case when rows_processed = 0 then null
-                                           else round((buffer_gets/nvl(replace(rows_processed,0,1),1))) 
-                                           end "Buffer_gets/rows_proc",
-                                      round((buffer_gets/nvl(replace(executions,0,1),1))) "Buffer_gets/executions",
-                                      (elapsed_time/1000000) "Elapsed_Seconds",
-                                      module "Module"
-                                 from gv$sql s
-                                order by buffer_gets desc nulls last]]></sql>
-		<columns>
-			<column colFormat="{0,number,###,###,###.0000}" hidden="false" isEditable="false">
-				<colName><![CDATA[CPU_Seconds]]></colName>
-			</column>
-			<column colFormat="{0,number,###,###,###.##}" hidden="false" isEditable="false">
-				<colName><![CDATA[Disk_Reads]]></colName>
-			</column>
-			<column colFormat="{0,number,###,###,###.##}" hidden="false" isEditable="false">
-				<colName><![CDATA[Buffer_Gets]]></colName>
-			</column>
-			<column colFormat="{0,number,###,###,###.##}" hidden="false" isEditable="false">
-				<colName><![CDATA[Executions]]></colName>
-			</column>
-			<column colFormat="{0,number,###,###,##0.000}" hidden="false" isEditable="false">
-				<colName><![CDATA[Buffer_gets/rows_proc]]></colName>
-			</column>
-			<column colFormat="{0,number,###,###,##0.000}" hidden="false" isEditable="false">
-				<colName><![CDATA[Buffer_gets/executions]]></colName>
-			</column>
-			<column colFormat="{0,number,###,###,###.0000}" hidden="false" isEditable="false">
-				<colName><![CDATA[Elapsed_Seconds]]></colName>
-			</column>
-		</columns>
-	</query>
-</display>
 <folder>
 	<name><![CDATA[@FranckPachot]]></name>
-	<tooltip><![CDATA[]]></tooltip>
-	<description><![CDATA[]]></description>
-		<display id="2c07859e-0172-1000-8002-0a64a632dc54" type="" style="Table" enable="true">
-		<name><![CDATA[Statspack]]></name>
-		<description><![CDATA[]]></description>
-		<tooltip><![CDATA[]]></tooltip>
+	<tooltip><![CDATA[@FranckPachot]]></tooltip>
+	<description><![CDATA[ ]]></description>
+		<display id="0ac4fe75-0166-1000-8001-c0a83801d760" type="" style="Table" enable="true">
+		<name><![CDATA[SQL Profiles]]></name>
+		<description><![CDATA[Displays the SQL Profiles found by the SQL Tuning Advisor with following detail:
+ - OPT_ESTIMATE hints ordered by SCALE_ROWS order of magnitude
+ - hints to reproduce the same plan]]></description>
+		<tooltip><![CDATA[ SQL Profiles found by the SQL Tuning Advisor, with SCALE_ROWS and HINTS]]></tooltip>
 		<drillclass><![CDATA[]]></drillclass>
 		<CustomValues>
 			<TYPE><![CDATA[horizontal]]></TYPE>
 		</CustomValues>
 		<query>
-			<sql><![CDATA[with "performance statistics" as (
+			<sql><![CDATA[select owner,task_name,object_id,attr1 sql_id,attr4 sql_text,rec_id,round(to_number(benefit)/100) benefit,advisor_name,created
+from dba_advisor_objects join dba_advisor_recommendations using (owner,task_name,task_id)
+join dba_advisor_tasks using(owner,task_id,task_name)
+where dba_advisor_objects.type='SQL' and dba_advisor_recommendations.type='SQL PROFILE'
+order by created desc,benefit desc]]></sql>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="" author="" subject="" keywords="" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="Times New Roman" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="Times New Roman" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="Times New Roman" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				null																																													</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[OPT_ESTIMATE]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select hint,round("order of magnitude") "order of magnitude",'SQLDEV:GAUGE:0:5:1:3:'||(5-abs(round("order of magnitude"))) "static statistics accuracy" from (
+select hint,log(10,to_number(regexp_replace(hint,'^.*=([0-9.]+)[^0-9].*$','\1'))) "order of magnitude" from (
+select case when attr5 like 'OPT_ESTIMATE%' then cast(attr5 as varchar2(4000)) when attr1 like 'OPT_ESTIMATE%' then attr1 end hint
+             from dba_advisor_rationale r 
+             where owner=:OWNER and task_name = :TASK_NAME and r.object_id= :OBJECT_ID and rec_id= :REC_ID
+             --and r.message in('This attribute adjusts optimizer estimates.','This attribute causes the optimizer to try an interesting alternative plan for this statement.')
+            )
+) where hint is not null and "order of magnitude" is not null           
+order by abs("order of magnitude") desc,hint]]></sql>
+				<binds>
+					<bind id="OWNER">
+						<prompt><![CDATA[OWNER]]></prompt>
+						<tooltip><![CDATA[OWNER]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="TASK_NAME">
+						<prompt><![CDATA[TASK_NAME]]></prompt>
+						<tooltip><![CDATA[TASK_NAME]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="OBJECT_ID">
+						<prompt><![CDATA[OBJECT_ID]]></prompt>
+						<tooltip><![CDATA[OBJECT_ID]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="REC_ID">
+						<prompt><![CDATA[REC_ID]]></prompt>
+						<tooltip><![CDATA[REC_ID]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="null" author="null" subject="null" keywords="null" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+					
+					
+					
+					
+					
+					
+					
+					
+					
+					null																																																								</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+		</display>
+		<display id="" type="" style="Table" enable="true">
+			<name><![CDATA[HINTS]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[select (extractvalue(value(d), '/hint')) hint from table(xmlsequence(extract( 
+(
+select outline_data from (
+   select case when other_xml is not null then extract(xmltype(other_xml),'/*/outline_data/hint') end outline_data
+              from dba_advisor_tasks t join dba_sqltune_plans p using (task_id)
+              where t.owner=:OWNER and t.task_name = :TASK_NAME and p.object_id=:OBJECT_ID  and t.advisor_name='SQL Tuning Advisor' --11gonly-- and execution_type='TUNE SQL'
+              and p.attribute='Using SQL profile'
+) where outline_data is not null     
+)
+, '/'))) d]]></sql>
+				<binds>
+					<bind id="OWNER">
+						<prompt><![CDATA[OWNER]]></prompt>
+						<tooltip><![CDATA[OWNER]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="TASK_NAME">
+						<prompt><![CDATA[TASK_NAME]]></prompt>
+						<tooltip><![CDATA[TASK_NAME]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+					<bind id="OBJECT_ID">
+						<prompt><![CDATA[OBJECT_ID]]></prompt>
+						<tooltip><![CDATA[OBJECT_ID]]></tooltip>
+						<value><![CDATA[NULL_VALUE]]></value>
+						<bracket><![CDATA[null]]></bracket>
+					</bind>
+				</binds>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="null" author="null" subject="null" keywords="null" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+					
+					
+					
+					
+					
+					
+					
+					
+					
+					null																																																								</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+		</display>
+	</display>
+	<folder>
+		<name><![CDATA[Statspack]]></name>
+		<tooltip><![CDATA[]]></tooltip>
+		<description><![CDATA[]]></description>
+			<display id="2cf8e00c-0172-1000-8002-0a64a6321b09" type="" style="Table" enable="true">
+			<name><![CDATA[Statspack snapshots]]></name>
+			<description><![CDATA[]]></description>
+			<tooltip><![CDATA[]]></tooltip>
+			<drillclass><![CDATA[]]></drillclass>
+			<CustomValues>
+				<TYPE><![CDATA[horizontal]]></TYPE>
+			</CustomValues>
+			<query>
+				<sql><![CDATA[with "performance statistics" as (
         -- This view adapts to AWR and Statspack and gathers statistics from different sources
         --
         ------------ comment one of the 2 following lines depending on AWR our Statspack source for SYSTEM EVENTS
@@ -178,36 +324,38 @@ select
 ,dbid,instance_number,snap_id end_snap_id,prev_snap_id begin_snap_id,"DB_TIME(s)" DB_TIME
 from "pivoted" v  
   order by trunc(end_interval_time,'MI') desc,db_name,instance_name]]></sql>
-		</query>
-			<pdf version="VERSION_1_7" compression="CONTENT">
-				<docproperty title="" author="" subject="" keywords="" />
-				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
-				<column>
-					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
-					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
-					<blob blob="NONE" zip="false" />
-				</column>
-				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
-				<header enable="false" generatedate="false">
-					<data>
+			</query>
+				<pdf version="VERSION_1_7" compression="CONTENT">
+					<docproperty title="" author="" subject="" keywords="" />
+					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+					<column>
+						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+						<blob blob="NONE" zip="false" />
+					</column>
+					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+					<header enable="false" generatedate="false">
+						<data>
+						
+				
 					
-				null									</data>
-				</header>
-				<footer enable="false" generatedate="false">
-					<data value="null" />
-				</footer>
-				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
-			</pdf>
-		<display id="" type="" style="Table" enable="true">
-			<name><![CDATA[Snapshots]]></name>
-			<description><![CDATA[]]></description>
-			<tooltip><![CDATA[]]></tooltip>
-			<drillclass><![CDATA[]]></drillclass>
-			<CustomValues>
-				<TYPE><![CDATA[horizontal]]></TYPE>
-			</CustomValues>
-			<query>
-				<sql><![CDATA[select to_char(s.startup_time,' dd Mon "at" HH24:mi:ss') "Instance startup"
+				null																			</data>
+					</header>
+					<footer enable="false" generatedate="false">
+						<data value="null" />
+					</footer>
+					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+				</pdf>
+			<display id="" type="" style="Table" enable="true">
+				<name><![CDATA[Snapshots]]></name>
+				<description><![CDATA[]]></description>
+				<tooltip><![CDATA[]]></tooltip>
+				<drillclass><![CDATA[]]></drillclass>
+				<CustomValues>
+					<TYPE><![CDATA[horizontal]]></TYPE>
+				</CustomValues>
+				<query>
+					<sql><![CDATA[select to_char(s.startup_time,' dd Mon "at" HH24:mi:ss') "Instance startup"
      , di.instance_name                                  "Instance name"
      , di.db_name                                        "Database name"
      , s.snap_id                                         SNAP_ID
@@ -228,63 +376,65 @@ from "pivoted" v
    and di.startup_time     = s.startup_time
    and s.snap_id > :BEGIN_SNAP_ID and s.snap_id <= :END_SNAP_ID
  order by db_name, instance_name, snap_id]]></sql>
-				<binds>
-					<bind id="BEGIN_SNAP_ID">
-						<prompt><![CDATA[BEGIN_SNAP_ID]]></prompt>
-						<tooltip><![CDATA[BEGIN_SNAP_ID]]></tooltip>
-						<value><![CDATA[NULL_VALUE]]></value>
-						<bracket><![CDATA[null]]></bracket>
-					</bind>
-					<bind id="DBID">
-						<prompt><![CDATA[DBID]]></prompt>
-						<tooltip><![CDATA[DBID]]></tooltip>
-						<value><![CDATA[NULL_VALUE]]></value>
-						<bracket><![CDATA[null]]></bracket>
-					</bind>
-					<bind id="INSTANCE_NUMBER">
-						<prompt><![CDATA[INSTANCE_NUMBER]]></prompt>
-						<tooltip><![CDATA[INSTANCE_NUMBER]]></tooltip>
-						<value><![CDATA[NULL_VALUE]]></value>
-						<bracket><![CDATA[null]]></bracket>
-					</bind>
-					<bind id="END_SNAP_ID">
-						<prompt><![CDATA[END_SNAP_ID]]></prompt>
-						<tooltip><![CDATA[END_SNAP_ID]]></tooltip>
-						<value><![CDATA[NULL_VALUE]]></value>
-						<bracket><![CDATA[null]]></bracket>
-					</bind>
-				</binds>
-			</query>
-				<pdf version="VERSION_1_7" compression="CONTENT">
-					<docproperty title="null" author="null" subject="null" keywords="null" />
-					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
-					<column>
-						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
-						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
-						<blob blob="NONE" zip="false" />
-					</column>
-					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
-					<header enable="false" generatedate="false">
-						<data>
+					<binds>
+						<bind id="BEGIN_SNAP_ID">
+							<prompt><![CDATA[BEGIN_SNAP_ID]]></prompt>
+							<tooltip><![CDATA[BEGIN_SNAP_ID]]></tooltip>
+							<value><![CDATA[NULL_VALUE]]></value>
+							<bracket><![CDATA[null]]></bracket>
+						</bind>
+						<bind id="DBID">
+							<prompt><![CDATA[DBID]]></prompt>
+							<tooltip><![CDATA[DBID]]></tooltip>
+							<value><![CDATA[NULL_VALUE]]></value>
+							<bracket><![CDATA[null]]></bracket>
+						</bind>
+						<bind id="INSTANCE_NUMBER">
+							<prompt><![CDATA[INSTANCE_NUMBER]]></prompt>
+							<tooltip><![CDATA[INSTANCE_NUMBER]]></tooltip>
+							<value><![CDATA[NULL_VALUE]]></value>
+							<bracket><![CDATA[null]]></bracket>
+						</bind>
+						<bind id="END_SNAP_ID">
+							<prompt><![CDATA[END_SNAP_ID]]></prompt>
+							<tooltip><![CDATA[END_SNAP_ID]]></tooltip>
+							<value><![CDATA[NULL_VALUE]]></value>
+							<bracket><![CDATA[null]]></bracket>
+						</bind>
+					</binds>
+				</query>
+					<pdf version="VERSION_1_7" compression="CONTENT">
+						<docproperty title="null" author="null" subject="null" keywords="null" />
+						<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+						<column>
+							<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+							<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+							<blob blob="NONE" zip="false" />
+						</column>
+						<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+						<header enable="false" generatedate="false">
+							<data>
+							
+					
 						
-					null											</data>
-					</header>
-					<footer enable="false" generatedate="false">
-						<data value="null" />
-					</footer>
-					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
-				</pdf>
-		</display>
-		<display id="" type="" style="Table" enable="true">
-			<name><![CDATA[Statements]]></name>
-			<description><![CDATA[]]></description>
-			<tooltip><![CDATA[]]></tooltip>
-			<drillclass><![CDATA[]]></drillclass>
-			<CustomValues>
-				<TYPE><![CDATA[horizontal]]></TYPE>
-			</CustomValues>
-			<query>
-				<sql><![CDATA[select
+					null																							</data>
+						</header>
+						<footer enable="false" generatedate="false">
+							<data value="null" />
+						</footer>
+						<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+					</pdf>
+			</display>
+			<display id="" type="" style="Table" enable="true">
+				<name><![CDATA[Statements]]></name>
+				<description><![CDATA[]]></description>
+				<tooltip><![CDATA[]]></tooltip>
+				<drillclass><![CDATA[]]></drillclass>
+				<CustomValues>
+					<TYPE><![CDATA[horizontal]]></TYPE>
+				</CustomValues>
+				<query>
+					<sql><![CDATA[select
 'SQLDEV:GAUGE:0:100:0:0:'||100*(e.ELAPSED_TIME-b.ELAPSED_TIME)/1e6/:DB_TIME "% DB Time"
 ,e.SNAP_ID
 ,e.DBID
@@ -336,37 +486,39 @@ on(e.dbid=b.dbid and e.instance_number=b.instance_number and e.TEXT_SUBSET=b.TEX
 where b.dbid=:DBID and b.instance_number=:INSTANCE_NUMBER and e.dbid=:DBID and e.instance_number=:INSTANCE_NUMBER 
 and b.snap_id = :BEGIN_SNAP_ID and e.snap_id = :END_SNAP_ID
 order by ELAPSED_TIME desc]]></sql>
-			</query>
-				<pdf version="VERSION_1_7" compression="CONTENT">
-					<docproperty title="null" author="null" subject="null" keywords="null" />
-					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
-					<column>
-						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
-						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
-						<blob blob="NONE" zip="false" />
-					</column>
-					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
-					<header enable="false" generatedate="false">
-						<data>
+				</query>
+					<pdf version="VERSION_1_7" compression="CONTENT">
+						<docproperty title="null" author="null" subject="null" keywords="null" />
+						<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+						<column>
+							<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+							<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+							<blob blob="NONE" zip="false" />
+						</column>
+						<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+						<header enable="false" generatedate="false">
+							<data>
+							
+					
 						
-					null											</data>
-					</header>
-					<footer enable="false" generatedate="false">
-						<data value="null" />
-					</footer>
-					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
-				</pdf>
-		</display>
-		<display id="" type="" style="Table" enable="true">
-			<name><![CDATA[Time model]]></name>
-			<description><![CDATA[]]></description>
-			<tooltip><![CDATA[]]></tooltip>
-			<drillclass><![CDATA[]]></drillclass>
-			<CustomValues>
-				<TYPE><![CDATA[horizontal]]></TYPE>
-			</CustomValues>
-			<query>
-				<sql><![CDATA[select
+					null																							</data>
+						</header>
+						<footer enable="false" generatedate="false">
+							<data value="null" />
+						</footer>
+						<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+					</pdf>
+			</display>
+			<display id="" type="" style="Table" enable="true">
+				<name><![CDATA[Time model]]></name>
+				<description><![CDATA[]]></description>
+				<tooltip><![CDATA[]]></tooltip>
+				<drillclass><![CDATA[]]></drillclass>
+				<CustomValues>
+					<TYPE><![CDATA[horizontal]]></TYPE>
+				</CustomValues>
+				<query>
+					<sql><![CDATA[select
 'SQLDEV:GAUGE:0:100:0:0:'||100*(e.VALUE-b.VALUE)/1e6/:DB_TIME "% DB Time"
 ,n.STAT_NAME "Statistic"
 ,round((e.VALUE-b.VALUE)/1e6,2) "Seconds"
@@ -378,37 +530,39 @@ join stats$time_model_statname n on (b.stat_id=n.stat_id)
 where b.dbid=:DBID and b.instance_number=:INSTANCE_NUMBER and e.dbid=:DBID and e.instance_number=:INSTANCE_NUMBER 
 and b.snap_id = :BEGIN_SNAP_ID and e.snap_id = :END_SNAP_ID
 order by (e.VALUE-b.VALUE) desc]]></sql>
-			</query>
-				<pdf version="VERSION_1_7" compression="CONTENT">
-					<docproperty title="null" author="null" subject="null" keywords="null" />
-					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
-					<column>
-						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
-						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
-						<blob blob="NONE" zip="false" />
-					</column>
-					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
-					<header enable="false" generatedate="false">
-						<data>
+				</query>
+					<pdf version="VERSION_1_7" compression="CONTENT">
+						<docproperty title="null" author="null" subject="null" keywords="null" />
+						<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+						<column>
+							<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+							<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+							<blob blob="NONE" zip="false" />
+						</column>
+						<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+						<header enable="false" generatedate="false">
+							<data>
+							
+					
 						
-					null											</data>
-					</header>
-					<footer enable="false" generatedate="false">
-						<data value="null" />
-					</footer>
-					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
-				</pdf>
-		</display>
-		<display id="" type="" style="Table" enable="true">
-			<name><![CDATA[Foreground Wait Events]]></name>
-			<description><![CDATA[]]></description>
-			<tooltip><![CDATA[]]></tooltip>
-			<drillclass><![CDATA[]]></drillclass>
-			<CustomValues>
-				<TYPE><![CDATA[horizontal]]></TYPE>
-			</CustomValues>
-			<query>
-				<sql><![CDATA[select
+					null																							</data>
+						</header>
+						<footer enable="false" generatedate="false">
+							<data value="null" />
+						</footer>
+						<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+					</pdf>
+			</display>
+			<display id="" type="" style="Table" enable="true">
+				<name><![CDATA[Foreground Wait Events]]></name>
+				<description><![CDATA[]]></description>
+				<tooltip><![CDATA[]]></tooltip>
+				<drillclass><![CDATA[]]></drillclass>
+				<CustomValues>
+					<TYPE><![CDATA[horizontal]]></TYPE>
+				</CustomValues>
+				<query>
+					<sql><![CDATA[select
 'SQLDEV:GAUGE:0:100:0:0:'||100*(e.TIME_WAITED_MICRO-b.TIME_WAITED_MICRO)/1e6/:DB_TIME "% DB Time"
 ,e.EVENT "Wait Event"
 ,e.TOTAL_WAITS-b.TOTAL_WAITS "Wait count"
@@ -431,27 +585,91 @@ and b.snap_id = :BEGIN_SNAP_ID and e.snap_id = :END_SNAP_ID
 --and e.EVENT not in (select name from V$EVENT_NAME where wait_class='Idle')
 and e.TOTAL_WAITS>b.TOTAL_WAITS and e.TOTAL_WAITS_FG>b.TOTAL_WAITS_FG
 order by TIME_WAITED_MICRO desc]]></sql>
-			</query>
-				<pdf version="VERSION_1_7" compression="CONTENT">
-					<docproperty title="null" author="null" subject="null" keywords="null" />
-					<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
-					<column>
-						<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
-						<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
-						<blob blob="NONE" zip="false" />
-					</column>
-					<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
-					<header enable="false" generatedate="false">
-						<data>
+				</query>
+					<pdf version="VERSION_1_7" compression="CONTENT">
+						<docproperty title="null" author="null" subject="null" keywords="null" />
+						<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+						<column>
+							<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+							<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+							<blob blob="NONE" zip="false" />
+						</column>
+						<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+						<header enable="false" generatedate="false">
+							<data>
+							
+					
 						
-					null											</data>
-					</header>
-					<footer enable="false" generatedate="false">
-						<data value="null" />
-					</footer>
-					<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
-				</pdf>
+					null																							</data>
+						</header>
+						<footer enable="false" generatedate="false">
+							<data value="null" />
+						</footer>
+						<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+					</pdf>
+			</display>
 		</display>
+	</folder>
+	<display id="2cf9f916-0172-1000-8003-0a64a6321b09" type="" style="Table" enable="true">
+		<name><![CDATA[Resize Datafiles]]></name>
+		<description><![CDATA[https://blog.dbi-services.com/resize-your-oracle-datafiles-down-to-the-minimum-without-ora-03297/]]></description>
+		<tooltip><![CDATA[]]></tooltip>
+		<drillclass><![CDATA[]]></drillclass>
+		<CustomValues>
+			<TYPE><![CDATA[horizontal]]></TYPE>
+		</CustomValues>
+		<query>
+			<sql><![CDATA[with
+ hwm as (
+  -- get highest block id from each datafiles ( from x$ktfbue as we don't need all joins from dba_extents )
+  select /*+ materialize */ ktfbuesegtsn ts#,ktfbuefno relative_fno,max(ktfbuebno+ktfbueblks-1) hwm_blocks
+  from sys.x$ktfbue group by ktfbuefno,ktfbuesegtsn
+ ),
+ hwmts as (
+  -- join ts# with tablespace_name
+  select name tablespace_name,relative_fno,hwm_blocks
+  from hwm join v$tablespace using(ts#)
+ ),
+ hwmdf as (
+  -- join with datafiles, put 5M minimum for datafiles with no extents
+  select file_name,nvl(hwm_blocks*(bytes/blocks),5*1024*1024) hwm_bytes,bytes,autoextensible,maxbytes
+  from hwmts right join dba_data_files using(tablespace_name,relative_fno)
+ )
+select
+ case when autoextensible='YES' and maxbytes>=bytes
+ then -- we generate resize statements only if autoextensible can grow back to current size
+  '/* reclaim '||to_char(ceil((bytes-hwm_bytes)/1024/1024),999999)
+   ||'M from '||to_char(ceil(bytes/1024/1024),999999)||'M */ '
+   ||'alter database datafile '''||file_name||''' resize '||ceil(hwm_bytes/1024/1024)||'M;'
+ else -- generate only a comment when autoextensible is off
+  '/* reclaim '||to_char(ceil((bytes-hwm_bytes)/1024/1024),999999)
+   ||'M from '||to_char(ceil(bytes/1024/1024),999999)
+   ||'M after setting autoextensible maxsize higher than current size for file '
+   || file_name||' */'
+ end SQL
+from hwmdf
+where
+ bytes-hwm_bytes>1024*1024 -- resize only if at least 1MB can be reclaimed
+order by bytes-hwm_bytes desc]]></sql>
+		</query>
+			<pdf version="VERSION_1_7" compression="CONTENT">
+				<docproperty title="null" author="null" subject="null" keywords="null" />
+				<cell toppadding="2" bottompadding="2" leftpadding="2" rightpadding="2" horizontalalign="LEFT" verticalalign="TOP" wrap="true" />
+				<column>
+					<heading font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="FIRST_PAGE" />
+					<footing font="null" size="10" style="NORMAL" color="-16777216" rowshading="-1" labeling="NONE" />
+					<blob blob="NONE" zip="false" />
+				</column>
+				<table font="null" size="10" style="NORMAL" color="-16777216" userowshading="false" oddrowshading="-1" evenrowshading="-1" showborders="true" spacingbefore="12" spacingafter="12" horizontalalign="LEFT" />
+				<header enable="false" generatedate="false">
+					<data>
+					null					</data>
+				</header>
+				<footer enable="false" generatedate="false">
+					<data value="null" />
+				</footer>
+				<pagesetup papersize="LETTER" orientation="1" measurement="in" margintop="1.0" marginbottom="1.0" marginleft="1.0" marginright="1.0" />
+			</pdf>
 	</display>
 </folder>
 </displays>
